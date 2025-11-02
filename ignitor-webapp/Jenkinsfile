@@ -1,0 +1,47 @@
+pipeline {
+  agent any
+  environment {
+    IMAGE = "ignitor-webapp:latest"
+  }
+  stages {
+    stage('Checkout') {
+      steps {
+        git branch: 'main', url: 'https://github.com/Subrat44/ignitor-web-app.git'
+      }
+    }
+    stage('Build (Maven)') {
+      steps {
+        sh 'mvn -B clean package'
+      }
+    }
+    stage('Build Docker Image') {
+      steps {
+        sh 'docker build -t ${IMAGE} .'
+      }
+    }
+    stage('Run Docker (smoke test)') {
+      steps {
+        script {
+          // remove old container if exists
+          sh 'docker rm -f ignitor-run || true'
+          // run container in detached mode on port 8080
+          sh 'docker run -d --name ignitor-run -p 8080:8080 ${IMAGE}'
+          // wait a bit for startup
+          sh 'sleep 5'
+          // simple health check
+          sh 'curl -f http://localhost:8080/ignitor-webapp || (docker logs ignitor-run; exit 1)'
+          // stop container after test
+          sh 'docker rm -f ignitor-run'
+        }
+      }
+    }
+  }
+  post {
+    always {
+      // cleanup workspace images if needed
+      sh 'docker image prune -f || true'
+    }
+  }
+}
+EOF
+
